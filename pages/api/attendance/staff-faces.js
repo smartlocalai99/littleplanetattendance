@@ -1,4 +1,5 @@
 import { getSql } from "@/lib/db";
+import { normalizeAnyFaceDescriptor } from "@/lib/face-recognition";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -14,16 +15,20 @@ export default async function handler(req, res) {
       WHERE face_registered = true
         AND face_embedding IS NOT NULL
         AND COALESCE(is_active, true) = true
-        AND jsonb_typeof(face_embedding) = 'object'
-        AND face_embedding ->> 'version' = '2'
       ORDER BY full_name ASC
     `;
+    const staff = rows
+      .map((row) => ({
+        ...row,
+        face_embedding: normalizeAnyFaceDescriptor(row.face_embedding),
+      }))
+      .filter((row) => row.face_embedding);
 
     res.setHeader("Cache-Control", "no-store");
 
     return res.status(200).json({
       success: true,
-      staff: rows,
+      staff,
     });
   } catch (error) {
     console.error("Fetch registered staff failed:", error);

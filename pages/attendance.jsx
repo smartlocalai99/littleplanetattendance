@@ -19,7 +19,23 @@ const STAFF_COOLDOWN_MS = 60 * 1000;
 
 function getErrorMessage(error) {
   if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
-    return "Camera permission denied";
+    return "Camera access is blocked";
+  }
+
+  if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") {
+    return "No front camera found";
+  }
+
+  if (error?.name === "NotReadableError" || error?.name === "TrackStartError") {
+    return "Camera is already in use";
+  }
+
+  if (error?.message === "CAMERA_REQUIRES_HTTPS") {
+    return "Camera requires HTTPS";
+  }
+
+  if (error?.message === "CAMERA_NOT_SUPPORTED") {
+    return "Camera is not supported";
   }
 
   return error?.message || "Something went wrong";
@@ -88,6 +104,8 @@ export default function AttendanceScannerPage() {
   const matchCandidateRef = useRef({ staffId: "", frames: 0 });
   const isProcessingRef = useRef(false);
   const isSuccessVisibleRef = useRef(false);
+  const isStartingRef = useRef(false);
+  const isMountedRef = useRef(false);
   const successTimeoutRef = useRef(null);
 
   const [status, setStatus] = useState("Starting scanner...");
@@ -98,21 +116,66 @@ export default function AttendanceScannerPage() {
   const [currentTime, setCurrentTime] = useState(null);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [canRetry, setCanRetry] = useState(false);
 
   async function startScannerCamera() {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "user",
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-      audio: false,
-    });
+    if (!window.isSecureContext && window.location.hostname !== "localhost") {
+      throw new Error("CAMERA_REQUIRES_HTTPS");
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("CAMERA_NOT_SUPPORTED");
+    }
+
+    let stream;
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "user" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+    } catch (error) {
+      if (
+        error?.name !== "OverconstrainedError" &&
+        error?.name !== "ConstraintNotSatisfiedError"
+      ) {
+        throw error;
+      }
+
+      // Older Android WebViews can reject ideal camera constraints.
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+    }
 
     streamRef.current = stream;
+    const videoTrack = stream.getVideoTracks()[0];
+
+    if (videoTrack) {
+      videoTrack.addEventListener(
+        "ended",
+        () => {
+          if (!isMountedRef.current || streamRef.current !== stream) {
+            return;
+          }
+
+          setIsCameraReady(false);
+          setCanRetry(true);
+          setStatus("Camera stopped");
+          setSubStatus("Tap Retry Camera to continue");
+        },
+        { once: true },
+      );
+    }
 
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
+      videoRef.current.setAttribute("playsinline", "");
       await videoRef.current.play();
     }
 
@@ -120,9 +183,29 @@ export default function AttendanceScannerPage() {
   }
 
   async function startScanLoop() {
+    if (isStartingRef.current) {
+      return;
+    }
+
+    isStartingRef.current = true;
+    setCanRetry(false);
+    stopScanner();
+
     try {
+      setStatus("Starting camera...");
+      setSubStatus("Allow camera access when asked");
+      await startScannerCamera();
       setStatus("Preparing face recognition...");
-      const staffFaces = await fetchRegisteredFaces();
+      setSubStatus("Keep this screen open");
+
+      const [staffFaces, faceLandmarker] = await Promise.all([
+        fetchRegisteredFaces(),
+        loadMediaPipe(),
+      ]);
+
+      if (!isMountedRef.current) {
+        return;
+      }
 
       if (staffFaces.length === 0) {
         setStatus("No compatible faces found");
@@ -131,16 +214,19 @@ export default function AttendanceScannerPage() {
       }
 
       staffFacesRef.current = staffFaces;
-      setStatus("Starting camera...");
-      landmarkerRef.current = await loadMediaPipe();
-      await startScannerCamera();
+      landmarkerRef.current = faceLandmarker;
       setStatus("Scanning...");
       setSubStatus("Position your face inside the circle");
 
       intervalRef.current = window.setInterval(scanFrame, SCAN_INTERVAL_MS);
     } catch (error) {
+      console.error("Attendance scanner startup failed:", error);
       setStatus(getErrorMessage(error));
-      setSubStatus("Unable to start attendance scanner");
+      setSubStatus("Check camera permission, then retry");
+      setCanRetry(true);
+      setIsCameraReady(false);
+    } finally {
+      isStartingRef.current = false;
     }
   }
 
@@ -156,8 +242,13 @@ export default function AttendanceScannerPage() {
     }
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      const stream = streamRef.current;
       streamRef.current = null;
+      stream.getTracks().forEach((track) => track.stop());
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
   }
 
@@ -315,14 +406,28 @@ export default function AttendanceScannerPage() {
   }
 
   useEffect(() => {
+    isMountedRef.current = true;
     const clockTimer = window.setInterval(() => setCurrentTime(new Date()), 1000);
     const startupTimer = window.setTimeout(() => {
       startScanLoop();
     }, 0);
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        streamRef.current &&
+        streamRef.current.getVideoTracks().every((track) => track.readyState === "ended")
+      ) {
+        startScanLoop();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      isMountedRef.current = false;
       window.clearTimeout(startupTimer);
       window.clearInterval(clockTimer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       stopScanner();
     };
     // Scanner should start once when this public page mounts.
@@ -330,14 +435,14 @@ export default function AttendanceScannerPage() {
   }, []);
 
   return (
-    <main className="fixed inset-0 h-[100dvh] w-screen touch-none overflow-hidden bg-black text-white">
+    <main className="fixed inset-0 h-[100dvh] w-screen overflow-hidden bg-black text-white">
       <video
         ref={videoRef}
         autoPlay
         muted
         playsInline
         className={[
-          "h-screen w-screen scale-x-[-1] object-cover transition-opacity duration-300",
+          "pointer-events-none h-[100dvh] w-screen scale-x-[-1] object-cover transition-opacity duration-300",
           isCameraReady ? "opacity-100" : "opacity-20",
         ].join(" ")}
       />
@@ -393,6 +498,15 @@ export default function AttendanceScannerPage() {
         ) : null}
 
         <p className="text-xl font-bold drop-shadow">{subStatus}</p>
+        {canRetry ? (
+          <button
+            type="button"
+            onClick={startScanLoop}
+            className="pointer-events-auto mt-5 min-h-14 rounded-2xl bg-[#43A047] px-8 text-base font-black text-white shadow-2xl active:scale-95"
+          >
+            Retry Camera
+          </button>
+        ) : null}
       </footer>
     </main>
   );

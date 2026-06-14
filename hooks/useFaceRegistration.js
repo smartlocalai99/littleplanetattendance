@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { createFaceDescriptor } from "@/lib/face-recognition";
 
-const MEDIAPIPE_VERSION = "0.10.35";
-const MEDIAPIPE_WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`;
-const FACE_LANDMARKER_MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
+const MEDIAPIPE_WASM_URL = "/mediapipe";
+const FACE_LANDMARKER_MODEL_URL = "/mediapipe/face_landmarker.task";
 
 export const FACE_POSE_STEPS = [
   { key: "CENTER", label: "Look Straight" },
@@ -26,6 +24,7 @@ export async function loadMediaPipe() {
   mediaPipeInstance = await FaceLandmarker.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: FACE_LANDMARKER_MODEL_URL,
+      delegate: "CPU",
     },
     numFaces: 2,
     runningMode: "VIDEO",
