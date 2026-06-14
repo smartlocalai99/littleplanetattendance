@@ -1,5 +1,5 @@
 import { getSql } from "@/lib/db";
-import { normalizeAnyFaceDescriptor } from "@/lib/face-recognition";
+import { normalizeStoredFaceDescriptor } from "@/lib/face-recognition";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -15,12 +15,14 @@ export default async function handler(req, res) {
       WHERE face_registered = true
         AND face_embedding IS NOT NULL
         AND COALESCE(is_active, true) = true
+        AND jsonb_typeof(face_embedding) = 'object'
+        AND face_embedding ->> 'version' = '2'
       ORDER BY full_name ASC
     `;
     const staff = rows
       .map((row) => ({
         ...row,
-        face_embedding: normalizeAnyFaceDescriptor(row.face_embedding),
+        face_embedding: normalizeStoredFaceDescriptor(row.face_embedding),
       }))
       .filter((row) => row.face_embedding);
 

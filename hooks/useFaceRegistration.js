@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
-import { createFaceDescriptor } from "@/lib/face-recognition";
+import {
+  averageFaceDescriptors,
+  createFaceDescriptor,
+} from "@/lib/face-recognition";
 
 const MEDIAPIPE_WASM_URL = "/mediapipe";
 const FACE_LANDMARKER_MODEL_URL = "/mediapipe/face_landmarker.task";
@@ -197,6 +200,7 @@ export function useFaceRegistration({ onComplete, onPermissionDenied, onError } 
   const processingRef = useRef(false);
   const capturesRef = useRef({});
   const stableStartTimeRef = useRef(null);
+  const centerSamplesRef = useRef([]);
 
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -302,14 +306,14 @@ export function useFaceRegistration({ onComplete, onPermissionDenied, onError } 
     }
   }
 
-  function captureCurrentPose(requiredPose, landmarks) {
+  function captureCurrentPose(requiredPose, capture) {
     if (navigator.vibrate) {
       navigator.vibrate(100);
     }
 
     const nextCaptures = {
       ...capturesRef.current,
-      [requiredPose]: landmarks,
+      [requiredPose]: capture,
     };
 
     capturesRef.current = nextCaptures;
@@ -320,8 +324,8 @@ export function useFaceRegistration({ onComplete, onPermissionDenied, onError } 
     const nextRequiredPose = getNextRequiredPose(nextCaptures);
 
     if (nextRequiredPose === "COMPLETE") {
-      // Side poses provide liveness; the centered pose is the stable identity descriptor.
-      const faceDescriptor = captureEmbedding(nextCaptures.CENTER);
+      // Side poses provide liveness; centered samples provide identity.
+      const faceDescriptor = nextCaptures.CENTER;
 
       if (!faceDescriptor) {
         setInstruction("Face capture failed");
@@ -379,12 +383,43 @@ export function useFaceRegistration({ onComplete, onPermissionDenied, onError } 
 
       if (stableStartTimeRef.current === null) {
         stableStartTimeRef.current = frameTime;
+        centerSamplesRef.current = [];
         return;
       }
 
-      if (frameTime - stableStartTimeRef.current >= 800) {
+      if (
+        requiredPose === "CENTER" &&
+        frameTime - stableStartTimeRef.current >= 500
+      ) {
+        const descriptor = captureEmbedding(captureState.face);
+
+        if (descriptor) {
+          centerSamplesRef.current.push(descriptor);
+          setHelperText(
+            `Hold still ${Math.min(centerSamplesRef.current.length, 5)}/5`,
+          );
+        }
+
+        if (centerSamplesRef.current.length >= 5) {
+          const averageDescriptor = averageFaceDescriptors(
+            centerSamplesRef.current.slice(-5),
+          );
+          stableStartTimeRef.current = null;
+          centerSamplesRef.current = [];
+
+          if (averageDescriptor) {
+            captureCurrentPose(requiredPose, averageDescriptor);
+          }
+        }
+        return;
+      }
+
+      if (
+        requiredPose !== "CENTER" &&
+        frameTime - stableStartTimeRef.current >= 800
+      ) {
         stableStartTimeRef.current = null;
-        captureCurrentPose(requiredPose, captureState.face);
+        captureCurrentPose(requiredPose, true);
       }
     } catch (error) {
       setInstruction(error?.message || "Unable to scan face");
@@ -402,6 +437,7 @@ export function useFaceRegistration({ onComplete, onPermissionDenied, onError } 
     stopCamera();
     capturesRef.current = {};
     stableStartTimeRef.current = null;
+    centerSamplesRef.current = [];
     setCaptures({});
     setFaceEmbedding(null);
     setCapturedPose("");

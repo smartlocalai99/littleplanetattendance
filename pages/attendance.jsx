@@ -10,9 +10,9 @@ import {
 import { faceDescriptorDistance } from "@/lib/face-recognition";
 import { formatIstTime, formatIstTimeWithSeconds } from "@/lib/time";
 
-const MAX_MATCH_DISTANCE = 0.07;
-const MIN_MATCH_MARGIN = 0.012;
-const REQUIRED_MATCH_FRAMES = 3;
+const MAX_MATCH_DISTANCE = 0.035;
+const MIN_MATCH_MARGIN = 0.02;
+const REQUIRED_MATCH_FRAMES = 5;
 const SCAN_INTERVAL_MS = 500;
 const SUCCESS_DISPLAY_MS = 3000;
 const STAFF_COOLDOWN_MS = 60 * 1000;
@@ -92,6 +92,20 @@ async function markAttendance(staffId, confidence) {
   }
 
   return data;
+}
+
+async function getCameraPermissionState() {
+  if (!navigator.permissions?.query) {
+    return "unknown";
+  }
+
+  try {
+    const permission = await navigator.permissions.query({ name: "camera" });
+    return permission.state;
+  } catch {
+    // Safari does not currently expose camera through the Permissions API.
+    return "unknown";
+  }
 }
 
 export default function AttendanceScannerPage() {
@@ -179,6 +193,7 @@ export default function AttendanceScannerPage() {
       await videoRef.current.play();
     }
 
+    window.localStorage.setItem("camera-access-granted", "true");
     setIsCameraReady(true);
   }
 
@@ -192,8 +207,23 @@ export default function AttendanceScannerPage() {
     stopScanner();
 
     try {
+      const permissionState = await getCameraPermissionState();
+      const previouslyGranted =
+        permissionState === "granted" ||
+        window.localStorage.getItem("camera-access-granted") === "true";
+
+      if (permissionState === "denied") {
+        const permissionError = new Error("Camera permission denied");
+        permissionError.name = "NotAllowedError";
+        throw permissionError;
+      }
+
       setStatus("Starting camera...");
-      setSubStatus("Allow camera access when asked");
+      setSubStatus(
+        previouslyGranted
+          ? "Opening your saved camera"
+          : "Allow camera access once when asked",
+      );
       await startScannerCamera();
       setStatus("Preparing face recognition...");
       setSubStatus("Keep this screen open");

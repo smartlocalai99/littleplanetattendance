@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Home, UserPlus } from "lucide-react";
+import { ArrowRightLeft, Home, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect } from "react";
@@ -18,6 +18,11 @@ const navItems = [
     label: "Enroll",
     route: "/admin/teachers/enroll",
     icon: UserPlus,
+  },
+  {
+    label: "Staff",
+    route: "/admin/staff",
+    icon: Users,
   },
 ];
 
@@ -44,7 +49,7 @@ export default function BottomNavigation() {
       style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
       aria-label="Admin navigation"
     >
-      <div className="mx-auto grid max-w-md grid-cols-3 gap-1 rounded-t-3xl">
+      <div className="mx-auto grid max-w-md grid-cols-4 gap-1 rounded-t-3xl">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = isActiveRoute(router.pathname, item.route);

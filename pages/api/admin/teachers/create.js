@@ -56,6 +56,7 @@ export default async function handler(req, res) {
   }
 
   const teacherId = String(req.body?.teacher_id || "").trim();
+  const staffId = String(req.body?.staff_id || "").trim();
   const fullName = String(req.body?.full_name || "").trim();
   const subject = String(req.body?.subject || "").trim();
   const faceEmbedding = normalizeEmbedding(req.body?.face_embedding);
@@ -79,10 +80,22 @@ export default async function handler(req, res) {
   try {
     const sql = getSql();
     const teacherIdState = await getTeacherIdState(sql, teacherId);
-    const isExistingTeacher =
-      teacherIdState.existingTeacher &&
-      teacherIdState.existingTeacher.full_name.trim().toLowerCase() ===
-        fullName.toLowerCase();
+    const targetRows = staffId
+      ? await sql`
+          SELECT id, teacher_id, full_name
+          FROM staff
+          WHERE id = ${staffId}
+          LIMIT 1
+        `
+      : [];
+    const targetTeacher = targetRows[0] || null;
+    const isExistingTeacher = Boolean(targetTeacher) ||
+      (
+        teacherIdState.existingTeacher &&
+        teacherIdState.existingTeacher.full_name.trim().toLowerCase() ===
+          fullName.toLowerCase()
+      );
+    const existingTeacher = targetTeacher || teacherIdState.existingTeacher;
     const registeredFaces = await sql`
       SELECT id, teacher_id, full_name, face_embedding
       FROM staff
@@ -93,7 +106,7 @@ export default async function handler(req, res) {
     `;
     const duplicateFace = registeredFaces.find(
       (staff) =>
-        staff.id !== teacherIdState.existingTeacher?.id &&
+        staff.id !== existingTeacher?.id &&
         faceDescriptorDistance(faceEmbedding, staff.face_embedding) < 0.018,
     );
 
@@ -107,12 +120,15 @@ export default async function handler(req, res) {
     if (isExistingTeacher) {
       const updatedRows = await sql`
         UPDATE staff
-        SET subject = ${subject},
+        SET teacher_id = ${teacherId},
+            full_name = ${fullName},
+            subject = ${subject},
             face_embedding = ${JSON.stringify(faceEmbedding)}::jsonb,
             face_registered = true,
+            is_active = true,
             face_registered_at = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = ${teacherIdState.existingTeacher.id}
+        WHERE id = ${existingTeacher.id}
         RETURNING id, teacher_id, full_name, subject, photo_url, face_registered, created_at
       `;
 

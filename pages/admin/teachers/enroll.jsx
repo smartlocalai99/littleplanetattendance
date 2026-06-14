@@ -7,6 +7,7 @@ import {
   ADMIN_SESSION_COOKIE,
   verifyAdminSessionToken,
 } from "@/lib/admin-session";
+import { getSql } from "@/lib/db";
 import { useFaceRegistration } from "@/hooks/useFaceRegistration";
 
 const subjects = [
@@ -23,7 +24,7 @@ const subjects = [
   "Other",
 ];
 
-export async function getServerSideProps({ req }) {
+export async function getServerSideProps({ req, query }) {
   const admin = await verifyAdminSessionToken(
     req.cookies?.[ADMIN_SESSION_COOKIE]
   );
@@ -37,7 +38,41 @@ export async function getServerSideProps({ req }) {
     };
   }
 
-  return { props: {} };
+  const staffId = typeof query.staffId === "string" ? query.staffId : "";
+
+  if (!staffId) {
+    return { props: { initialStaff: null } };
+  }
+
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT id, teacher_id, full_name, subject
+      FROM staff
+      WHERE id = ${staffId}
+      LIMIT 1
+    `;
+
+    return {
+      props: {
+        initialStaff: rows[0]
+          ? {
+              id: rows[0].id,
+              teacherId: rows[0].teacher_id,
+              fullName: rows[0].full_name,
+              subject: rows[0].subject,
+            }
+          : null,
+      },
+    };
+  } catch {
+    return {
+      redirect: {
+        destination: "/admin/staff",
+        permanent: false,
+      },
+    };
+  }
 }
 
 function getErrorMessage(error) {
@@ -55,14 +90,14 @@ function getCameraSettingsText() {
   return "Settings -> Permissions -> Camera -> Allow";
 }
 
-export default function EnrollTeacherPage() {
+export default function EnrollTeacherPage({ initialStaff }) {
   const router = useRouter();
   const photoInputRef = useRef(null);
   const photoPreviewRef = useRef("");
 
-  const [teacherId, setTeacherId] = useState("");
-  const [teacherName, setTeacherName] = useState("");
-  const [subject, setSubject] = useState("");
+  const [teacherId, setTeacherId] = useState(initialStaff?.teacherId || "");
+  const [teacherName, setTeacherName] = useState(initialStaff?.fullName || "");
+  const [subject, setSubject] = useState(initialStaff?.subject || "");
   const [photo, setPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -114,6 +149,10 @@ export default function EnrollTeacherPage() {
 
   useEffect(() => {
     async function loadNextTeacherId() {
+      if (initialStaff) {
+        return;
+      }
+
       try {
         const response = await fetch("/api/admin/teachers/next-id");
         const data = await response.json();
@@ -133,7 +172,7 @@ export default function EnrollTeacherPage() {
         URL.revokeObjectURL(photoPreviewRef.current);
       }
     };
-  }, []);
+  }, [initialStaff]);
 
   async function generateNextTeacherId() {
     try {
@@ -232,6 +271,7 @@ export default function EnrollTeacherPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          staff_id: initialStaff?.id || null,
           teacher_id: teacherId.trim(),
           full_name: teacherName.trim(),
           subject,
@@ -256,7 +296,11 @@ export default function EnrollTeacherPage() {
         confirmButtonColor: "#43A047",
       });
 
-      resetForm();
+      if (initialStaff) {
+        router.replace("/admin/staff");
+      } else {
+        resetForm();
+      }
     } catch (error) {
       await Swal.fire({
         icon: "error",
@@ -384,8 +428,14 @@ export default function EnrollTeacherPage() {
           Back
         </button>
 
-        <h1 className="text-2xl font-bold">Enroll Teacher</h1>
-        <p className="mt-1 text-green-100">Register a new teacher</p>
+        <h1 className="text-2xl font-bold">
+          {initialStaff ? "Update Staff Face" : "Enroll Teacher"}
+        </h1>
+        <p className="mt-1 text-green-100">
+          {initialStaff
+            ? `Re-register ${initialStaff.fullName}`
+            : "Register a new teacher"}
+        </p>
       </header>
 
       <div className="p-5">
@@ -398,11 +448,12 @@ export default function EnrollTeacherPage() {
             <input
               type="text"
               value={teacherId}
+              readOnly={Boolean(initialStaff)}
               onChange={(event) =>
                 setTeacherId(event.target.value.toUpperCase())
               }
               placeholder="T001"
-              className="h-14 w-full rounded-2xl border border-slate-200 px-5 outline-none focus:border-[#43A047]"
+              className="h-14 w-full rounded-2xl border border-slate-200 px-5 outline-none focus:border-[#43A047] read-only:bg-slate-100 read-only:text-slate-500"
             />
           </div>
 
@@ -414,9 +465,10 @@ export default function EnrollTeacherPage() {
             <input
               type="text"
               value={teacherName}
+              readOnly={Boolean(initialStaff)}
               onChange={(event) => setTeacherName(event.target.value)}
               placeholder="Ramesh Kumar"
-              className="h-14 w-full rounded-2xl border border-slate-200 px-5 outline-none focus:border-[#43A047]"
+              className="h-14 w-full rounded-2xl border border-slate-200 px-5 outline-none focus:border-[#43A047] read-only:bg-slate-100 read-only:text-slate-500"
             />
           </div>
 
