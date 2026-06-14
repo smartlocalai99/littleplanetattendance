@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Swal from "sweetalert2";
 
 import BottomNavigation from "@/components/BottomNavigation";
@@ -94,21 +94,21 @@ export default function StaffPage({ staff = [] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
+  const staffList = Array.isArray(staff) ? staff : [];
+  const activeStaff = staffList.filter((person) => person.isActive).length;
+  const faceReadyStaff = staffList.filter(
+    (person) => person.isActive && person.faceReady,
+  ).length;
 
-  const filteredStaff = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return Array.isArray(staff) ? staff : [];
-    }
-
-    return (Array.isArray(staff) ? staff : []).filter((person) =>
-      [person.fullName, person.teacherId, person.subject]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [query, staff]);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredStaff = normalizedQuery
+    ? staffList.filter((person) =>
+        [person.fullName, person.teacherId, person.subject]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+    : staffList;
 
   async function refreshPage() {
     await router.replace(router.asPath, undefined, { scroll: false });
@@ -219,7 +219,22 @@ export default function StaffPage({ staff = [] }) {
       </header>
 
       <div className="mx-auto max-w-5xl px-4 py-5 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-6">
-        <div className="relative">
+        <section className="grid grid-cols-3 gap-3">
+          <div className="rounded-2xl bg-slate-900 p-4 text-white">
+            <p className="text-3xl font-black">{staffList.length}</p>
+            <p className="mt-1 text-xs font-bold text-slate-300">Total Staff</p>
+          </div>
+          <div className="rounded-2xl bg-emerald-600 p-4 text-white">
+            <p className="text-3xl font-black">{activeStaff}</p>
+            <p className="mt-1 text-xs font-bold text-emerald-100">Active</p>
+          </div>
+          <div className="rounded-2xl bg-blue-600 p-4 text-white">
+            <p className="text-3xl font-black">{faceReadyStaff}</p>
+            <p className="mt-1 text-xs font-bold text-blue-100">Face Ready</p>
+          </div>
+        </section>
+
+        <div className="relative mt-4">
           <Search
             className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
             aria-hidden="true"
@@ -290,7 +305,7 @@ export default function StaffPage({ staff = [] }) {
                   </span>
                 </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
                   <button
                     type="button"
                     onClick={() => setEditing({ ...person })}
