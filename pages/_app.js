@@ -1,6 +1,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 
+import AppRecoveryBoundary from "@/components/AppRecoveryBoundary";
 import PwaRegister from "@/components/PwaRegister";
 import "@/styles/globals.css";
 
@@ -35,7 +36,9 @@ export default function App({ Component, pageProps }) {
         />
         <link rel="manifest" href={manifestHref} key="manifest" />
       </Head>
-      <Component {...pageProps} />
+      <AppRecoveryBoundary key={router.asPath}>
+        <Component {...pageProps} />
+      </AppRecoveryBoundary>
       <PwaRegister />
     </>
   );

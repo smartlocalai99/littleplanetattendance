@@ -1,4 +1,4 @@
-const CACHE_NAME = "smart-attendance-v6";
+const CACHE_NAME = "smart-attendance-v7";
 const OFFLINE_URL = "/offline.html";
 const APP_SHELL = [
   OFFLINE_URL,
@@ -49,7 +49,7 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: "no-store" })
         .catch(() => caches.match(OFFLINE_URL)),
     );
     return;
