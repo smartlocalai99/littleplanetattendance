@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { captureEmbedding, loadMediaPipe } from "@/hooks/useFaceRegistration";
+import { formatIstTime, formatIstTimeWithSeconds } from "@/lib/time";
 
 const MATCH_THRESHOLD = 0.82;
 const SCAN_INTERVAL_MS = 1500;
@@ -91,12 +92,15 @@ export default function AttendanceScannerPage() {
   const staffFacesRef = useRef([]);
   const lastMarkedRef = useRef({});
   const isProcessingRef = useRef(false);
+  const isSuccessVisibleRef = useRef(false);
   const successTimeoutRef = useRef(null);
 
   const [status, setStatus] = useState("Loading scanner...");
   const [subStatus, setSubStatus] = useState("Please wait");
   const [matchedStaff, setMatchedStaff] = useState(null);
   const [attendanceType, setAttendanceType] = useState("");
+  const [recordedAt, setRecordedAt] = useState(null);
+  const [currentTime, setCurrentTime] = useState(null);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
 
@@ -162,9 +166,11 @@ export default function AttendanceScannerPage() {
     }
   }
 
-  function showSuccess(staff, type) {
+  function showSuccess(staff, type, attendanceTime) {
     setMatchedStaff(staff);
     setAttendanceType(type);
+    setRecordedAt(attendanceTime || null);
+    isSuccessVisibleRef.current = true;
     setIsSuccessVisible(true);
     setStatus(staff.full_name);
 
@@ -189,6 +195,8 @@ export default function AttendanceScannerPage() {
     successTimeoutRef.current = window.setTimeout(() => {
       setMatchedStaff(null);
       setAttendanceType("");
+      setRecordedAt(null);
+      isSuccessVisibleRef.current = false;
       setIsSuccessVisible(false);
       setStatus("Scanning...");
       setSubStatus("Position your face inside the circle");
@@ -203,7 +211,7 @@ export default function AttendanceScannerPage() {
       return;
     }
 
-    if (isSuccessVisible) {
+    if (isSuccessVisibleRef.current) {
       return;
     }
 
@@ -248,7 +256,13 @@ export default function AttendanceScannerPage() {
       lastMarkedRef.current[bestMatch.staff.id] = Date.now();
 
       const result = await markAttendance(bestMatch.staff.id, bestMatch.similarity);
-      showSuccess(result.staff || bestMatch.staff, result.type);
+      showSuccess(
+        result.staff || bestMatch.staff,
+        result.type,
+        result.recorded_at ||
+          result.attendance?.check_out ||
+          result.attendance?.check_in,
+      );
     } catch (error) {
       setStatus("Scanner error");
       setSubStatus(getErrorMessage(error));
@@ -258,12 +272,14 @@ export default function AttendanceScannerPage() {
   }
 
   useEffect(() => {
+    const clockTimer = window.setInterval(() => setCurrentTime(new Date()), 1000);
     const startupTimer = window.setTimeout(() => {
       startScanLoop();
     }, 0);
 
     return () => {
       window.clearTimeout(startupTimer);
+      window.clearInterval(clockTimer);
       stopScanner();
     };
     // Scanner should start once when this public page mounts.
@@ -271,7 +287,7 @@ export default function AttendanceScannerPage() {
   }, []);
 
   return (
-    <main className="fixed inset-0 h-screen w-screen overflow-hidden bg-black text-white">
+    <main className="fixed inset-0 h-[100dvh] w-screen touch-none overflow-hidden bg-black text-white">
       <video
         ref={videoRef}
         autoPlay
@@ -307,6 +323,9 @@ export default function AttendanceScannerPage() {
           Smart Attendance
         </p>
         <h1 className="mt-2 text-2xl font-bold">{status}</h1>
+        <p className="mt-2 font-mono text-sm font-semibold text-white/75">
+          {formatIstTimeWithSeconds(currentTime)} IST
+        </p>
       </header>
 
       <footer
@@ -322,6 +341,11 @@ export default function AttendanceScannerPage() {
             <p className="mt-1 text-sm font-semibold text-slate-500">
               {matchedStaff.teacher_id} • {matchedStaff.subject}
             </p>
+            {recordedAt ? (
+              <p className="mt-3 text-lg font-black text-slate-900">
+                {formatIstTime(recordedAt)} IST
+              </p>
+            ) : null}
           </div>
         ) : null}
 

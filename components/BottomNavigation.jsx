@@ -1,4 +1,5 @@
-import { ClipboardList, Home, UserPlus, Users } from "lucide-react";
+import { Home, ScanFace, UserPlus } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/router";
 
 const navItems = [
@@ -8,19 +9,14 @@ const navItems = [
     icon: Home,
   },
   {
+    label: "Scan",
+    route: "/attendance",
+    icon: ScanFace,
+  },
+  {
     label: "Enroll",
     route: "/admin/teachers/enroll",
     icon: UserPlus,
-  },
-  {
-    label: "Teachers",
-    route: "/admin/teachers",
-    icon: Users,
-  },
-  {
-    label: "Logs",
-    route: "/admin/logs",
-    icon: ClipboardList,
   },
 ];
 
@@ -41,17 +37,16 @@ export default function BottomNavigation() {
       style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
       aria-label="Admin navigation"
     >
-      <div className="mx-auto grid max-w-md grid-cols-4 gap-1 rounded-t-3xl">
+      <div className="mx-auto grid max-w-md grid-cols-3 gap-1 rounded-t-3xl">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = isActiveRoute(router.pathname, item.route);
 
           return (
-            <button
+            <Link
               key={item.route}
-              type="button"
+              href={item.route}
               aria-current={isActive ? "page" : undefined}
-              onClick={() => router.push(item.route)}
               className={[
                 "flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-semibold transition-all duration-200 ease-out",
                 isActive
@@ -68,7 +63,7 @@ export default function BottomNavigation() {
                 aria-hidden="true"
               />
               <span>{item.label}</span>
-            </button>
+            </Link>
           );
         })}
       </div>

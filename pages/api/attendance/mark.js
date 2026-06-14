@@ -1,8 +1,7 @@
+import { ensureAttendanceTable } from "@/lib/attendance-db";
 import { getSql } from "@/lib/db";
 
 const CHECKOUT_DELAY_HOURS = 4;
-
-let attendanceTableReadyPromise = null;
 
 function normalizeConfidence(value) {
   const confidence = Number(value);
@@ -12,31 +11,6 @@ function normalizeConfidence(value) {
   }
 
   return Math.min(1, Math.max(0, confidence));
-}
-
-async function ensureAttendanceTable(sql) {
-  if (!attendanceTableReadyPromise) {
-    attendanceTableReadyPromise = (async () => {
-      await sql`CREATE TABLE IF NOT EXISTS attendance (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        staff_id UUID REFERENCES staff(id),
-        attendance_date DATE NOT NULL,
-        check_in TIMESTAMP,
-        check_out TIMESTAMP,
-        status VARCHAR(20) DEFAULT 'Present',
-        confidence NUMERIC(5,4),
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )`;
-      await sql`ALTER TABLE attendance ALTER COLUMN id SET DEFAULT gen_random_uuid()`;
-      await sql`ALTER TABLE attendance ALTER COLUMN status SET DEFAULT 'Present'`;
-      await sql`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4)`;
-      await sql`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`;
-      await sql`CREATE UNIQUE INDEX IF NOT EXISTS attendance_staff_date_unique ON attendance (staff_id, attendance_date)`;
-    })();
-  }
-
-  return attendanceTableReadyPromise;
 }
 
 export default async function handler(req, res) {
@@ -55,6 +29,7 @@ export default async function handler(req, res) {
   try {
     const sql = getSql();
     await ensureAttendanceTable(sql);
+    res.setHeader("Cache-Control", "no-store");
 
     const staffRows = await sql`
       SELECT id, teacher_id, full_name, subject
@@ -70,39 +45,46 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, message: "Registered staff not found" });
     }
 
-    const attendanceRows = await sql`
-      SELECT id, check_in, check_out, status, confidence
-      FROM attendance
-      WHERE staff_id = ${staffId}
-        AND attendance_date = CURRENT_DATE
-      LIMIT 1
+    const inserted = await sql`
+      INSERT INTO attendance (
+        staff_id,
+        attendance_date,
+        check_in,
+        status,
+        confidence
+      )
+      VALUES (
+        ${staffId},
+        (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
+        CURRENT_TIMESTAMP,
+        'Present',
+        ${confidence}
+      )
+      ON CONFLICT (staff_id, attendance_date) DO NOTHING
+      RETURNING id, attendance_date, check_in, check_out, status, confidence
     `;
-    const attendance = attendanceRows[0];
 
-    if (!attendance) {
-      const inserted = await sql`
-        INSERT INTO attendance (staff_id, attendance_date, check_in, status, confidence)
-        VALUES (${staffId}, CURRENT_DATE, NOW(), 'Present', ${confidence})
-        RETURNING id, attendance_date, check_in, check_out, status, confidence
-      `;
-
+    if (inserted.length > 0) {
       return res.status(200).json({
         success: true,
         type: "check_in",
         staff,
         confidence,
         attendance: inserted[0],
+        recorded_at: inserted[0].check_in,
       });
     }
 
     const checkoutRows = await sql`
       UPDATE attendance
-      SET check_out = NOW(),
+      SET check_out = CURRENT_TIMESTAMP,
           confidence = COALESCE(${confidence}, confidence),
-          updated_at = NOW()
-      WHERE id = ${attendance.id}
+          updated_at = CURRENT_TIMESTAMP
+      WHERE staff_id = ${staffId}
+        AND attendance_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
         AND check_in IS NOT NULL
-        AND NOW() >= check_in + (${CHECKOUT_DELAY_HOURS} * INTERVAL '1 hour')
+        AND check_out IS NULL
+        AND CURRENT_TIMESTAMP >= check_in + (${CHECKOUT_DELAY_HOURS} * INTERVAL '1 hour')
       RETURNING id, attendance_date, check_in, check_out, status, confidence
     `;
 
@@ -113,20 +95,33 @@ export default async function handler(req, res) {
         staff,
         confidence,
         attendance: checkoutRows[0],
+        recorded_at: checkoutRows[0].check_out,
       });
     }
 
+    const attendanceRows = await sql`
+      SELECT id, attendance_date, check_in, check_out, status, confidence
+      FROM attendance
+      WHERE staff_id = ${staffId}
+        AND attendance_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+      LIMIT 1
+    `;
+    const attendance = attendanceRows[0];
+    const type = attendance?.check_out ? "completed" : "ignored";
+
     return res.status(200).json({
       success: true,
-      type: "ignored",
+      type,
       staff,
       confidence,
-      message: "Check-out ignored until 4 hours after check-in.",
+      message:
+        type === "completed"
+          ? "Attendance is already complete for today."
+          : `Check-out is available ${CHECKOUT_DELAY_HOURS} hours after check-in.`,
       attendance,
     });
   } catch (error) {
     console.error("Mark attendance failed:", error);
-    attendanceTableReadyPromise = null;
 
     return res.status(500).json({
       success: false,
