@@ -10,7 +10,6 @@ import { useState } from "react";
 
 import BottomNavigation from "@/components/BottomNavigation";
 import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/admin-session";
-import { ensureAttendanceTable } from "@/lib/attendance-db";
 import { getSql } from "@/lib/db";
 import {
   formatDuration,
@@ -67,8 +66,6 @@ export async function getServerSideProps({ req, query }) {
       ? query.date
       : today;
   const sql = getSql();
-
-  await ensureAttendanceTable(sql);
 
   const rows = await sql`
     SELECT
@@ -158,11 +155,19 @@ export default function AttendanceInOutPage({ records, selectedDate, today }) {
     }
 
     setIsLoadingDate(true);
-    await router.push({
-      pathname: "/admin/attendance",
-      query: { date: nextDate },
-    });
-    setIsLoadingDate(false);
+
+    try {
+      await router.push({
+        pathname: "/admin/attendance",
+        query: { date: nextDate },
+      });
+    } catch (error) {
+      if (!error?.cancelled) {
+        console.error("Attendance date navigation failed:", error);
+      }
+    } finally {
+      setIsLoadingDate(false);
+    }
   }
 
   return (

@@ -14,7 +14,6 @@ import { useEffect, useState } from "react";
 
 import BottomNavigation from "@/components/BottomNavigation";
 import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/admin-session";
-import { ensureAttendanceTable } from "@/lib/attendance-db";
 import { getSql } from "@/lib/db";
 import {
   EARLY_BEFORE,
@@ -44,7 +43,6 @@ export async function getServerSideProps({ req }) {
   }
 
   const sql = getSql();
-  await ensureAttendanceTable(sql);
 
   const [attendanceRows, weeklyRows] = await Promise.all([
     sql`
@@ -229,8 +227,21 @@ export default function AdminDashboardPage({
 
   useEffect(() => {
     const clockTimer = window.setInterval(() => setCurrentTime(new Date()), 1000);
-    const refreshTimer = window.setInterval(() => {
-      router.replace(router.asPath, undefined, { scroll: false });
+    const refreshTimer = window.setInterval(async () => {
+      if (
+        document.visibilityState !== "visible" ||
+        router.pathname !== "/admin/dashboard"
+      ) {
+        return;
+      }
+
+      try {
+        await router.replace(router.asPath, undefined, { scroll: false });
+      } catch (error) {
+        if (!error?.cancelled) {
+          console.error("Dashboard refresh failed:", error);
+        }
+      }
     }, 60000);
 
     return () => {
@@ -241,8 +252,16 @@ export default function AdminDashboardPage({
 
   async function handleRefresh() {
     setIsRefreshing(true);
-    await router.replace(router.asPath, undefined, { scroll: false });
-    setIsRefreshing(false);
+
+    try {
+      await router.replace(router.asPath, undefined, { scroll: false });
+    } catch (error) {
+      if (!error?.cancelled) {
+        console.error("Dashboard refresh failed:", error);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
   }
 
   async function handleLogout() {
