@@ -1,4 +1,4 @@
-const CACHE_NAME = "smart-attendance-v1";
+const CACHE_NAME = "smart-attendance-v2";
 const OFFLINE_URL = "/offline.html";
 const APP_SHELL = [
   OFFLINE_URL,

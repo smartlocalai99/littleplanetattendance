@@ -1,11 +1,12 @@
-import React from 'react'
-
-function index() {
-  return (
-    <div>
-      hi
-    </div>
-  )
+export default function HomeRedirect() {
+  return null;
 }
 
-export default index
+export function getServerSideProps() {
+  return {
+    redirect: {
+      destination: "/admin/dashboard",
+      permanent: false,
+    },
+  };
+}

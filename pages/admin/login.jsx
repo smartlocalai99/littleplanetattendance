@@ -39,7 +39,15 @@ export default function AdminLoginPage() {
       }
 
       window.localStorage.setItem("admin", JSON.stringify(data.admin));
-      router.replace("/admin/dashboard");
+      const requestedPath =
+        typeof router.query.from === "string" &&
+        router.query.from.startsWith("/admin/")
+          ? router.query.from
+          : "/admin/dashboard";
+
+      // A full navigation ensures the new HttpOnly session cookie is used
+      // immediately in installed PWA mode.
+      window.location.replace(requestedPath);
     } catch {
       setToastMessage("Unable to connect to the server");
     } finally {

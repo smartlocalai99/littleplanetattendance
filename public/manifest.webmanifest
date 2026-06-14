@@ -1,8 +1,9 @@
 {
   "name": "Smart Attendance AI",
-  "short_name": "Attendance",
+  "short_name": "Attendance Admin",
   "description": "Fast face-recognition check-in and check-out for staff.",
-  "start_url": "/attendance",
+  "id": "/admin/dashboard",
+  "start_url": "/admin/dashboard",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
