@@ -1,4 +1,4 @@
-import { Home, ScanFace, UserPlus } from "lucide-react";
+import { ArrowRightLeft, Home, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -9,9 +9,9 @@ const navItems = [
     icon: Home,
   },
   {
-    label: "Scan",
-    route: "/attendance",
-    icon: ScanFace,
+    label: "In / Out",
+    route: "/admin/attendance",
+    icon: ArrowRightLeft,
   },
   {
     label: "Enroll",
