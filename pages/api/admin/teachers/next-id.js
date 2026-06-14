@@ -30,6 +30,8 @@ export default async function handler(req, res) {
       ? Number.parseInt(rows[0].teacher_id.slice(1), 10)
       : 0;
 
+    res.setHeader("Cache-Control", "no-store");
+
     return res.status(200).json({
       success: true,
       teacher_id: formatTeacherId(Number.isFinite(lastNumber) ? lastNumber + 1 : 1),

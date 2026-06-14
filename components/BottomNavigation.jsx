@@ -1,7 +1,7 @@
 import { ArrowRightLeft, Home, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 const navItems = [
   {
@@ -31,22 +31,11 @@ function isActiveRoute(pathname, route) {
 
 export default function BottomNavigation() {
   const router = useRouter();
-  const [pendingRoute, setPendingRoute] = useState("");
 
   useEffect(() => {
-    const finishNavigation = () => setPendingRoute("");
-
-    router.events.on("routeChangeComplete", finishNavigation);
-    router.events.on("routeChangeError", finishNavigation);
-
     navItems.forEach((item) => {
       router.prefetch(item.route);
     });
-
-    return () => {
-      router.events.off("routeChangeComplete", finishNavigation);
-      router.events.off("routeChangeError", finishNavigation);
-    };
   }, [router]);
 
   return (
@@ -65,35 +54,27 @@ export default function BottomNavigation() {
               key={item.route}
               href={item.route}
               aria-current={isActive ? "page" : undefined}
-              aria-disabled={Boolean(pendingRoute)}
               onClick={(event) => {
-                if (isActive || pendingRoute) {
+                if (isActive) {
                   event.preventDefault();
-                  return;
                 }
-
-                setPendingRoute(item.route);
               }}
               className={[
                 "flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-semibold transition-all duration-200 ease-out",
                 isActive
                   ? "bg-emerald-50 text-emerald-600"
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
-                pendingRoute && pendingRoute !== item.route
-                  ? "pointer-events-none opacity-50"
-                  : "",
               ].join(" ")}
             >
               <Icon
                 className={[
                   "h-5 w-5 transition-transform duration-200",
                   isActive ? "scale-110" : "scale-100",
-                  pendingRoute === item.route ? "animate-pulse" : "",
                 ].join(" ")}
                 strokeWidth={isActive ? 2.6 : 2.2}
                 aria-hidden="true"
               />
-              <span>{pendingRoute === item.route ? "Loading..." : item.label}</span>
+              <span>{item.label}</span>
             </Link>
           );
         })}

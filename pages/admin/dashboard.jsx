@@ -223,7 +223,6 @@ export default function AdminDashboardPage({
 }) {
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState(new Date(generatedAt));
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const clockTimer = window.setInterval(() => setCurrentTime(new Date()), 1000);
@@ -251,16 +250,12 @@ export default function AdminDashboardPage({
   }, [router]);
 
   async function handleRefresh() {
-    setIsRefreshing(true);
-
     try {
       await router.replace(router.asPath, undefined, { scroll: false });
     } catch (error) {
       if (!error?.cancelled) {
         console.error("Dashboard refresh failed:", error);
       }
-    } finally {
-      setIsRefreshing(false);
     }
   }
 
@@ -299,10 +294,7 @@ export default function AdminDashboardPage({
               onClick={handleRefresh}
               className="flex min-h-12 min-w-12 items-center justify-center rounded-2xl bg-white/15 transition active:scale-95"
             >
-              <RefreshCw
-                className={`h-5 w-5 ${isRefreshing ? "animate-spin" : ""}`}
-                aria-hidden="true"
-              />
+              <RefreshCw className="h-5 w-5" aria-hidden="true" />
             </button>
             <button
               type="button"

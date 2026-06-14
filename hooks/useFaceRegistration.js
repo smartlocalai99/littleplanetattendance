@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { createFaceDescriptor } from "@/lib/face-recognition";
+
 const MEDIAPIPE_VERSION = "0.10.35";
 const MEDIAPIPE_WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`;
 const FACE_LANDMARKER_MODEL_URL =
@@ -32,29 +34,8 @@ export async function loadMediaPipe() {
   return mediaPipeInstance;
 }
 
-export function averageEmbeddings(embeddings) {
-  if (!embeddings.length) {
-    return [];
-  }
-
-  const length = embeddings[0].length;
-  const average = new Array(length).fill(0);
-
-  embeddings.forEach((embedding) => {
-    embedding.forEach((value, index) => {
-      average[index] += value;
-    });
-  });
-
-  return average.map((value) => Number((value / embeddings.length).toFixed(8)));
-}
-
 export function captureEmbedding(landmarks) {
-  return landmarks.flatMap((point) => [
-    Number(point.x.toFixed(6)),
-    Number(point.y.toFixed(6)),
-    Number((point.z || 0).toFixed(6)),
-  ]);
+  return createFaceDescriptor(landmarks);
 }
 
 function getNextRequiredPose(captures) {
@@ -329,7 +310,7 @@ export function useFaceRegistration({ onComplete, onPermissionDenied, onError } 
 
     const nextCaptures = {
       ...capturesRef.current,
-      [requiredPose]: captureEmbedding(landmarks),
+      [requiredPose]: landmarks,
     };
 
     capturesRef.current = nextCaptures;
@@ -340,17 +321,23 @@ export function useFaceRegistration({ onComplete, onPermissionDenied, onError } 
     const nextRequiredPose = getNextRequiredPose(nextCaptures);
 
     if (nextRequiredPose === "COMPLETE") {
-      const averageEmbedding = averageEmbeddings(
-        FACE_POSE_STEPS.map((step) => nextCaptures[step.key]),
-      );
+      // Side poses provide liveness; the centered pose is the stable identity descriptor.
+      const faceDescriptor = captureEmbedding(nextCaptures.CENTER);
 
-      setFaceEmbedding(averageEmbedding);
+      if (!faceDescriptor) {
+        setInstruction("Face capture failed");
+        setHelperText("Please register the face again");
+        resetFaceRegistration();
+        return;
+      }
+
+      setFaceEmbedding(faceDescriptor);
       setInstruction("Face Registration Complete");
       setHelperText("Ready to save teacher");
       stopCamera({ keepOverlay: true });
       window.setTimeout(() => {
         setIsOverlayOpen(false);
-        onComplete?.(averageEmbedding);
+        onComplete?.(faceDescriptor);
       }, 850);
       return;
     }

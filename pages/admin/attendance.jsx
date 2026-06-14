@@ -6,7 +6,6 @@ import {
   Users,
 } from "lucide-react";
 import { useRouter } from "next/router";
-import { useState } from "react";
 
 import BottomNavigation from "@/components/BottomNavigation";
 import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/admin-session";
@@ -143,7 +142,6 @@ function PunchTime({ icon: Icon, label, value, emptyText, tone }) {
 
 export default function AttendanceInOutPage({ records, selectedDate, today }) {
   const router = useRouter();
-  const [isLoadingDate, setIsLoadingDate] = useState(false);
   const completed = records.filter((record) => record.checkOut).length;
   const onSite = records.filter((record) => record.checkIn && !record.checkOut).length;
 
@@ -154,8 +152,6 @@ export default function AttendanceInOutPage({ records, selectedDate, today }) {
       return;
     }
 
-    setIsLoadingDate(true);
-
     try {
       await router.push({
         pathname: "/admin/attendance",
@@ -165,8 +161,6 @@ export default function AttendanceInOutPage({ records, selectedDate, today }) {
       if (!error?.cancelled) {
         console.error("Attendance date navigation failed:", error);
       }
-    } finally {
-      setIsLoadingDate(false);
     }
   }
 
@@ -201,9 +195,8 @@ export default function AttendanceInOutPage({ records, selectedDate, today }) {
             type="date"
             value={selectedDate}
             max={today}
-            disabled={isLoadingDate}
             onChange={handleDateChange}
-            className="mt-3 min-h-14 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-base font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:opacity-60"
+            className="mt-3 min-h-14 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-base font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
           />
           <p className="mt-3 text-sm font-semibold text-slate-500">
             Showing {formatIstDate(`${selectedDate}T00:00:00+05:30`)}

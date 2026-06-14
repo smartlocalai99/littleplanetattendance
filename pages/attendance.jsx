@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 
-import { captureEmbedding, loadMediaPipe } from "@/hooks/useFaceRegistration";
+import {
+  captureEmbedding,
+  detectPose,
+  isFaceInsideCircle,
+  isFaceSizeValid,
+  loadMediaPipe,
+} from "@/hooks/useFaceRegistration";
+import { faceDescriptorDistance } from "@/lib/face-recognition";
 import { formatIstTime, formatIstTimeWithSeconds } from "@/lib/time";
 
-const MATCH_THRESHOLD = 0.82;
-const SCAN_INTERVAL_MS = 1500;
+const MAX_MATCH_DISTANCE = 0.07;
+const MIN_MATCH_MARGIN = 0.012;
+const REQUIRED_MATCH_FRAMES = 3;
+const SCAN_INTERVAL_MS = 500;
 const SUCCESS_DISPLAY_MS = 3000;
 const STAFF_COOLDOWN_MS = 60 * 1000;
 
@@ -16,41 +25,26 @@ function getErrorMessage(error) {
   return error?.message || "Something went wrong";
 }
 
-function cosineSimilarity(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length || a.length === 0) {
-    return 0;
-  }
-
-  let dot = 0;
-  let magnitudeA = 0;
-  let magnitudeB = 0;
-
-  for (let index = 0; index < a.length; index += 1) {
-    dot += a[index] * b[index];
-    magnitudeA += a[index] * a[index];
-    magnitudeB += b[index] * b[index];
-  }
-
-  if (!magnitudeA || !magnitudeB) {
-    return 0;
-  }
-
-  return dot / (Math.sqrt(magnitudeA) * Math.sqrt(magnitudeB));
-}
-
 function findBestMatch(embedding, staffFaces) {
-  return staffFaces.reduce(
-    (best, staff) => {
-      const similarity = cosineSimilarity(embedding, staff.face_embedding);
+  const matches = staffFaces
+    .map((staff) => ({
+      staff,
+      distance: faceDescriptorDistance(embedding, staff.face_embedding),
+    }))
+    .filter((match) => Number.isFinite(match.distance))
+    .sort((first, second) => first.distance - second.distance);
+  const best = matches[0] || null;
+  const second = matches[1] || null;
 
-      if (similarity > best.similarity) {
-        return { staff, similarity };
-      }
+  if (!best || best.distance > MAX_MATCH_DISTANCE) {
+    return null;
+  }
 
-      return best;
-    },
-    { staff: null, similarity: 0 },
-  );
+  if (second && second.distance - best.distance < MIN_MATCH_MARGIN) {
+    return null;
+  }
+
+  return best;
 }
 
 async function fetchRegisteredFaces() {
@@ -91,11 +85,12 @@ export default function AttendanceScannerPage() {
   const landmarkerRef = useRef(null);
   const staffFacesRef = useRef([]);
   const lastMarkedRef = useRef({});
+  const matchCandidateRef = useRef({ staffId: "", frames: 0 });
   const isProcessingRef = useRef(false);
   const isSuccessVisibleRef = useRef(false);
   const successTimeoutRef = useRef(null);
 
-  const [status, setStatus] = useState("Loading scanner...");
+  const [status, setStatus] = useState("Starting scanner...");
   const [subStatus, setSubStatus] = useState("Please wait");
   const [matchedStaff, setMatchedStaff] = useState(null);
   const [attendanceType, setAttendanceType] = useState("");
@@ -126,12 +121,12 @@ export default function AttendanceScannerPage() {
 
   async function startScanLoop() {
     try {
-      setStatus("Loading registered faces...");
+      setStatus("Preparing face recognition...");
       const staffFaces = await fetchRegisteredFaces();
 
       if (staffFaces.length === 0) {
-        setStatus("No registered staff found");
-        setSubStatus("Enroll teacher faces first");
+        setStatus("No compatible faces found");
+        setSubStatus("Re-register staff faces in the admin app");
         return;
       }
 
@@ -222,29 +217,76 @@ export default function AttendanceScannerPage() {
       const faces = results.faceLandmarks || [];
 
       if (faces.length === 0) {
+        matchCandidateRef.current = { staffId: "", frames: 0 };
         setStatus("Scanning...");
         setSubStatus("No face detected");
         return;
       }
 
       if (faces.length > 1) {
+        matchCandidateRef.current = { staffId: "", frames: 0 };
         setStatus("Multiple faces detected");
         setSubStatus("Only one person should be visible");
         return;
       }
 
-      setStatus("Face detected");
-      setSubStatus("Verifying...");
+      const face = faces[0];
+      const sizeState = isFaceSizeValid(face);
+      const pose = detectPose(face);
 
-      const embedding = captureEmbedding(faces[0]);
+      if (!isFaceInsideCircle(face)) {
+        matchCandidateRef.current = { staffId: "", frames: 0 };
+        setStatus("Center your face");
+        setSubStatus("Keep your full face inside the circle");
+        return;
+      }
+
+      if (!sizeState.valid) {
+        matchCandidateRef.current = { staffId: "", frames: 0 };
+        setStatus(sizeState.message);
+        setSubStatus("Keep your face inside the circle");
+        return;
+      }
+
+      if (pose.status !== "CENTER") {
+        matchCandidateRef.current = { staffId: "", frames: 0 };
+        setStatus("Look straight");
+        setSubStatus("Face the camera directly");
+        return;
+      }
+
+      const embedding = captureEmbedding(face);
       const bestMatch = findBestMatch(embedding, staffFacesRef.current);
 
-      if (!bestMatch.staff || bestMatch.similarity < MATCH_THRESHOLD) {
+      if (!bestMatch) {
+        matchCandidateRef.current = { staffId: "", frames: 0 };
         setStatus("Unknown face");
         setSubStatus("Please try again");
         return;
       }
 
+      const previousCandidate = matchCandidateRef.current;
+      const matchingFrames =
+        previousCandidate.staffId === bestMatch.staff.id
+          ? previousCandidate.frames + 1
+          : 1;
+
+      matchCandidateRef.current = {
+        staffId: bestMatch.staff.id,
+        frames: matchingFrames,
+      };
+      setStatus(bestMatch.staff.full_name);
+      setSubStatus(
+        matchingFrames >= REQUIRED_MATCH_FRAMES
+          ? "Identity confirmed"
+          : "Hold still for verification",
+      );
+
+      if (matchingFrames < REQUIRED_MATCH_FRAMES) {
+        return;
+      }
+
+      matchCandidateRef.current = { staffId: "", frames: 0 };
       const lastMarkedAt = lastMarkedRef.current[bestMatch.staff.id] || 0;
 
       if (Date.now() - lastMarkedAt < STAFF_COOLDOWN_MS) {
@@ -255,7 +297,8 @@ export default function AttendanceScannerPage() {
 
       lastMarkedRef.current[bestMatch.staff.id] = Date.now();
 
-      const result = await markAttendance(bestMatch.staff.id, bestMatch.similarity);
+      const confidence = Math.max(0, Math.min(1, 1 - bestMatch.distance));
+      const result = await markAttendance(bestMatch.staff.id, confidence);
       showSuccess(
         result.staff || bestMatch.staff,
         result.type,

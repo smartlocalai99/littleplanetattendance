@@ -13,8 +13,13 @@ export default async function handler(req, res) {
       FROM staff
       WHERE face_registered = true
         AND face_embedding IS NOT NULL
+        AND COALESCE(is_active, true) = true
+        AND jsonb_typeof(face_embedding) = 'object'
+        AND face_embedding ->> 'version' = '2'
       ORDER BY full_name ASC
     `;
+
+    res.setHeader("Cache-Control", "no-store");
 
     return res.status(200).json({
       success: true,

@@ -140,7 +140,7 @@ return (
             disabled={isLoading}
             className="mt-8 h-14 w-full rounded-2xl bg-[#43A047] text-lg font-bold text-white shadow-lg transition-all duration-200 hover:scale-[1.02] hover:bg-[#388E3C] disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {isLoading ? "LOGGING IN..." : "LOGIN"}
+            LOGIN
           </button>
         </form>
 

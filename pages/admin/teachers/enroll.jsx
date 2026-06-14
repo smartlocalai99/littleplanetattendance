@@ -247,8 +247,12 @@ export default function EnrollTeacherPage() {
 
       await Swal.fire({
         icon: "success",
-        title: "Teacher Enrolled",
-        text: "Teacher registered successfully.",
+        title: data.teacher_updated ? "Face Updated" : "Teacher Enrolled",
+        text: data.teacher_updated
+          ? `${data.teacher.full_name}'s face registration was updated.`
+          : data.teacher_id_changed
+            ? `Teacher registered successfully as ${data.teacher.teacher_id}.`
+            : "Teacher registered successfully.",
         confirmButtonColor: "#43A047",
       });
 
@@ -325,7 +329,7 @@ export default function EnrollTeacherPage() {
 
             <p className="mt-2 text-sm font-semibold text-white/75">
               {isLoadingMediaPipe
-                ? "Loading camera..."
+                ? "Preparing camera..."
                 : instruction || "Keep your face inside the circle"}
             </p>
           </div>
@@ -467,6 +471,10 @@ export default function EnrollTeacherPage() {
                 <p className="mt-2 text-sm font-semibold text-slate-600">
                   Register face once for attendance recognition.
                 </p>
+                <p className="mt-2 text-xs font-medium text-slate-500">
+                  To update an existing face, enter the same Teacher ID and name,
+                  then register again.
+                </p>
               </div>
 
               {isComplete ? (
@@ -493,7 +501,7 @@ export default function EnrollTeacherPage() {
               {isComplete
                 ? "Face Registered"
                 : isLoadingMediaPipe
-                  ? "Loading..."
+                  ? "Preparing..."
                   : "Register Face"}
             </button>
 
