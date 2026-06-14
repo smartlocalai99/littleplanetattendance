@@ -90,7 +90,7 @@ export async function getServerSideProps({ req }) {
   };
 }
 
-export default function StaffPage({ staff }) {
+export default function StaffPage({ staff = [] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
@@ -99,10 +99,10 @@ export default function StaffPage({ staff }) {
     const normalizedQuery = query.trim().toLowerCase();
 
     if (!normalizedQuery) {
-      return staff;
+      return Array.isArray(staff) ? staff : [];
     }
 
-    return staff.filter((person) =>
+    return (Array.isArray(staff) ? staff : []).filter((person) =>
       [person.fullName, person.teacherId, person.subject]
         .join(" ")
         .toLowerCase()

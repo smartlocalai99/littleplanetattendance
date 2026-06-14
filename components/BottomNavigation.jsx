@@ -1,7 +1,5 @@
 import { ArrowRightLeft, Home, UserPlus, Users } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect } from "react";
 
 const navItems = [
   {
@@ -37,12 +35,6 @@ function isActiveRoute(pathname, route) {
 export default function BottomNavigation() {
   const router = useRouter();
 
-  useEffect(() => {
-    navItems.forEach((item) => {
-      router.prefetch(item.route);
-    });
-  }, [router]);
-
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white px-3 pt-2 shadow-[0_-12px_30px_rgba(15,23,42,0.14)]"
@@ -55,7 +47,7 @@ export default function BottomNavigation() {
           const isActive = isActiveRoute(router.pathname, item.route);
 
           return (
-            <Link
+            <a
               key={item.route}
               href={item.route}
               aria-current={isActive ? "page" : undefined}
@@ -80,7 +72,7 @@ export default function BottomNavigation() {
                 aria-hidden="true"
               />
               <span>{item.label}</span>
-            </Link>
+            </a>
           );
         })}
       </div>
