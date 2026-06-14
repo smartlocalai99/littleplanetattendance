@@ -1,6 +1,8 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
+import { useEffect } from "react";
 
+import { AppErrorBoundary, recoverFromStaleBuild } from "@/components/AppErrorBoundary";
 import PwaRegister from "@/components/PwaRegister";
 import "@/styles/globals.css";
 
@@ -12,6 +14,15 @@ export default function App({ Component, pageProps }) {
     ? "/manifest-attendance.webmanifest"
     : "/manifest.webmanifest";
   const themeColor = isAttendanceApp ? "#000000" : "#047857";
+
+  useEffect(() => {
+    function handleRouteError(error) {
+      recoverFromStaleBuild(error);
+    }
+
+    router.events.on("routeChangeError", handleRouteError);
+    return () => router.events.off("routeChangeError", handleRouteError);
+  }, [router]);
 
   return (
     <>
@@ -35,7 +46,9 @@ export default function App({ Component, pageProps }) {
         />
         <link rel="manifest" href={manifestHref} key="manifest" />
       </Head>
-      <Component {...pageProps} />
+      <AppErrorBoundary key={router.asPath}>
+        <Component {...pageProps} />
+      </AppErrorBoundary>
       <PwaRegister />
     </>
   );
