@@ -13,8 +13,8 @@ import { formatIstTime, formatIstTimeWithSeconds } from "@/lib/time";
 
 const MAX_MATCH_DISTANCE = 0.035;
 const MIN_MATCH_MARGIN = 0.02;
-const REQUIRED_MATCH_FRAMES = 5;
-const SCAN_INTERVAL_MS = 500;
+const REQUIRED_MATCH_FRAMES = 2;
+const SCAN_INTERVAL_MS = 200;
 const SUCCESS_DISPLAY_MS = 3000;
 const STAFF_COOLDOWN_MS = 60 * 1000;
 
