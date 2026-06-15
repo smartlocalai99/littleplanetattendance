@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import Swal from "sweetalert2";
 
 import {
   captureEmbedding,
@@ -283,6 +284,38 @@ export default function AttendanceScannerPage() {
   }
 
   function showSuccess(staff, type, attendanceTime) {
+    const formattedTime = attendanceTime
+      ? `${formatIstTime(attendanceTime)} IST`
+      : "";
+    const popup =
+      type === "check_in"
+        ? {
+            icon: "success",
+            title: "Check-in Successful",
+            text: `${staff.full_name}, your attendance has been marked${
+              formattedTime ? ` at ${formattedTime}` : ""
+            }.`,
+          }
+        : type === "check_out"
+          ? {
+              icon: "success",
+              title: "Check-out Successful",
+              text: `${staff.full_name}, your check-out has been marked${
+                formattedTime ? ` at ${formattedTime}` : ""
+              }.`,
+            }
+          : type === "ignored"
+            ? {
+                icon: "info",
+                title: "Already Checked In",
+                text: `${staff.full_name}, your attendance was already marked today.`,
+              }
+            : {
+                icon: "info",
+                title: "Attendance Completed",
+                text: `${staff.full_name}, your attendance is already complete for today.`,
+              };
+
     setMatchedStaff(staff);
     setAttendanceType(type);
     setRecordedAt(attendanceTime || null);
@@ -303,6 +336,13 @@ export default function AttendanceScannerPage() {
     if (navigator.vibrate) {
       navigator.vibrate(120);
     }
+
+    void Swal.fire({
+      ...popup,
+      confirmButtonColor: "#43A047",
+      timer: SUCCESS_DISPLAY_MS,
+      timerProgressBar: true,
+    });
 
     if (successTimeoutRef.current) {
       window.clearTimeout(successTimeoutRef.current);
