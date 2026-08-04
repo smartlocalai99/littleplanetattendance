@@ -1,0 +1,12 @@
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS fingerprint_template TEXT;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS is_enrolled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS fingerprint_enrolled_at TIMESTAMPTZ;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS fingerprint_updated_at TIMESTAMPTZ;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS fingerprint_device_serial TEXT;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS photo_url TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS staff_teacher_id_unique ON staff (teacher_id);
+CREATE INDEX IF NOT EXISTS staff_is_enrolled_index ON staff (is_enrolled);
+CREATE INDEX IF NOT EXISTS staff_is_active_index ON staff (is_active);

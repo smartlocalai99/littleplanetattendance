@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#047857" />
+    <title>Smart Attendance AI - Offline</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #f4f7f5;
+        color: #0f172a;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(100%, 420px);
+        padding: 32px;
+        border: 1px solid #dbe4df;
+        border-radius: 28px;
+        background: white;
+        text-align: center;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.1);
+      }
+      img { width: 88px; height: 88px; border-radius: 20px; }
+      h1 { margin: 20px 0 8px; font-size: 26px; }
+      p { margin: 0; color: #64748b; line-height: 1.6; }
+      button {
+        width: 100%;
+        min-height: 52px;
+        margin-top: 24px;
+        border: 0;
+        border-radius: 16px;
+        background: #047857;
+        color: white;
+        font: inherit;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icon-192.png" alt="" />
+      <h1>You are offline</h1>
+      <p>Reconnect to mark attendance or load live dashboard data.</p>
+      <button type="button" onclick="window.location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

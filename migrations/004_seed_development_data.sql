@@ -1,0 +1,3 @@
+-- Executed by lib/migrations.js so bcrypt password hashes can be generated safely.
+-- Seeds admin/admin123 only when admins is empty.
+-- Seeds sample fingerprint-enrolled teachers only when staff is empty.
