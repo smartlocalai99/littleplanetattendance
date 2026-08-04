@@ -25,14 +25,14 @@ import {
   usePwaInstallState,
 } from "@/lib/pwa-install";
 import {
-  EARLY_BEFORE,
   formatDuration,
   formatIstDate,
   formatIstTime,
   formatIstTimeWithSeconds,
-  LATE_AFTER,
   serializeTimestamp,
+  format12HourTime,
 } from "@/lib/time";
+import { getSchoolSettings } from "@/lib/settings";
 
 function numberValue(value) {
   const number = Number(value);
@@ -53,6 +53,7 @@ export async function getServerSideProps({ req }) {
 
   const sql = getSql();
   await ensureCoreSchema(sql);
+  const settings = await getSchoolSettings(sql);
 
   const [attendanceRows, weeklyRows, staffRows] = await Promise.all([
     sql`
@@ -68,7 +69,7 @@ export async function getServerSideProps({ req }) {
         CASE
           WHEN a.check_in IS NOT NULL THEN
             a.check_in > (
-              (a.attendance_date + ${LATE_AFTER}::time)
+              (a.attendance_date + ${settings.school_start_time}::time)
               AT TIME ZONE 'Asia/Kolkata'
             )
           ELSE false
@@ -76,7 +77,7 @@ export async function getServerSideProps({ req }) {
         CASE
           WHEN a.check_out IS NOT NULL THEN
             a.check_out < (
-              (a.attendance_date + ${EARLY_BEFORE}::time)
+              (a.attendance_date + ${settings.school_end_time}::time)
               AT TIME ZONE 'Asia/Kolkata'
             )
           ELSE false
@@ -183,6 +184,7 @@ export async function getServerSideProps({ req }) {
         teacherId: row.teacher_id || "",
         fullName: row.full_name || "",
       })),
+      settings,
     },
   };
 }
@@ -242,10 +244,15 @@ export default function AdminDashboardPage({
   summary,
   weekly,
   staffList = [],
+  settings,
 }) {
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState(new Date(generatedAt));
   const { isInstalled } = usePwaInstallState();
+
+  const [schoolStartTime, setSchoolStartTime] = useState(settings?.school_start_time || "08:30");
+  const [schoolEndTime, setSchoolEndTime] = useState(settings?.school_end_time || "16:30");
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const [reportType, setReportType] = useState("all");
   const [selectedStaffId, setSelectedStaffId] = useState("");
@@ -253,6 +260,47 @@ export default function AdminDashboardPage({
   const [selectedYear, setSelectedYear] = useState(new Date(generatedAt).getFullYear());
   const [exportFormat, setExportFormat] = useState("grid");
   const [downloading, setDownloading] = useState(false);
+
+  async function handleSaveSettings(event) {
+    event.preventDefault();
+    setSavingSettings(true);
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          school_start_time: schoolStartTime,
+          school_end_time: schoolEndTime,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to update settings");
+      }
+
+      await Swal.fire({
+        icon: "success",
+        title: "Settings Updated",
+        text: "School timings updated successfully! Lateness metrics will now reflect the new schedule.",
+        confirmButtonColor: "#059669",
+      });
+
+      router.replace(router.asPath, undefined, { scroll: false });
+    } catch (error) {
+      console.error("Save settings error:", error);
+      await Swal.fire({
+        icon: "error",
+        title: "Update Failed",
+        text: error.message || "Could not update settings. Please try again.",
+        confirmButtonColor: "#059669",
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
   const monthOptions = [
     { val: 1, label: "January" },
@@ -559,8 +607,8 @@ export default function AdminDashboardPage({
           <article className="rounded-[1.75rem] bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
             <h2 className="text-lg font-black">Exceptions</h2>
             <p className="text-sm text-slate-500">
-              Schedule: {formatIstTime(`2026-01-01T03:00:00.000Z`)} to{" "}
-              {formatIstTime(`2026-01-01T11:00:00.000Z`)} IST
+              Schedule: {format12HourTime(settings?.school_start_time)} to{" "}
+              {format12HourTime(settings?.school_end_time)} IST
             </p>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
@@ -703,6 +751,55 @@ export default function AdminDashboardPage({
               {downloading ? "Downloading..." : "Download Report"}
             </button>
           </div>
+        </section>
+
+        <section className="mt-6 rounded-[1.75rem] bg-white p-6 shadow-sm ring-1 ring-slate-200/70">
+          <div>
+            <h2 className="text-xl font-black text-slate-900">School Schedule Settings</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              Configure the default school timing. Attendance registers and lateness reports will adapt immediately.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveSettings} className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="school-start-time" className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                School Start Time (Late After)
+              </label>
+              <input
+                id="school-start-time"
+                type="time"
+                value={schoolStartTime}
+                onChange={(event) => setSchoolStartTime(event.target.value)}
+                className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label htmlFor="school-end-time" className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                School End Time (Early Before)
+              </label>
+              <input
+                id="school-end-time"
+                type="time"
+                value={schoolEndTime}
+                onChange={(event) => setSchoolEndTime(event.target.value)}
+                className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                required
+              />
+            </div>
+
+            <div className="sm:col-span-2 mt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={savingSettings}
+                className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 text-sm font-black text-white shadow-md transition hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {savingSettings ? "Saving Settings..." : "Save Settings"}
+              </button>
+            </div>
+          </form>
         </section>
 
         <section className="mt-6">

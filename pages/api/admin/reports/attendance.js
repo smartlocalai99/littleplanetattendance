@@ -2,7 +2,8 @@ import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/admin-sessi
 import { getSql } from "@/lib/db";
 import { ensureCoreSchema } from "@/lib/migrations";
 import { formatInTimeZone } from "date-fns-tz";
-import { APP_TIME_ZONE, LATE_AFTER, EARLY_BEFORE, formatDuration } from "@/lib/time";
+import { APP_TIME_ZONE, formatDuration } from "@/lib/time";
+import { getSchoolSettings } from "@/lib/settings";
 
 function escapeCsv(val) {
   if (val === null || val === undefined) {
@@ -21,17 +22,16 @@ function getDayName(year, month, day) {
   return formatter.format(date);
 }
 
-function checkIsLate(checkInDate) {
+function checkIsLate(checkInDate, lateAfterTime) {
   if (!checkInDate) return false;
   const timeStr = formatInTimeZone(new Date(checkInDate), APP_TIME_ZONE, "HH:mm");
-  return timeStr > LATE_AFTER;
+  return timeStr > lateAfterTime;
 }
 
-// EARLY_BEFORE is 16:30. An exit is early if it's before that.
-function checkIsEarly(checkOutDate) {
+function checkIsEarly(checkOutDate, earlyBeforeTime) {
   if (!checkOutDate) return false;
   const timeStr = formatInTimeZone(new Date(checkOutDate), APP_TIME_ZONE, "HH:mm");
-  return timeStr < EARLY_BEFORE;
+  return timeStr < earlyBeforeTime;
 }
 
 export default async function handler(req, res) {
@@ -57,6 +57,7 @@ export default async function handler(req, res) {
   try {
     const sql = getSql();
     await ensureCoreSchema(sql);
+    const settings = await getSchoolSettings(sql);
 
     const daysInMonth = new Date(year, month, 0).getDate();
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -148,8 +149,8 @@ export default async function handler(req, res) {
             durationStr = formatDuration(record.check_in, record.check_out);
           }
 
-          const isLate = checkIsLate(record.check_in);
-          const isEarly = checkIsEarly(record.check_out);
+          const isLate = checkIsLate(record.check_in, settings.school_start_time);
+          const isEarly = checkIsEarly(record.check_out, settings.school_end_time);
 
           lateStr = isLate ? "Yes" : "No";
           earlyStr = isEarly ? "Yes" : "No";
@@ -204,8 +205,8 @@ export default async function handler(req, res) {
               durationStr = formatDuration(record.check_in, record.check_out);
             }
 
-            lateStr = checkIsLate(record.check_in) ? "Yes" : "No";
-            earlyStr = checkIsEarly(record.check_out) ? "Yes" : "No";
+            lateStr = checkIsLate(record.check_in, settings.school_start_time) ? "Yes" : "No";
+            earlyStr = checkIsEarly(record.check_out, settings.school_end_time) ? "Yes" : "No";
           } else {
             if (isSunday) {
               status = "Sunday";
@@ -271,8 +272,8 @@ export default async function handler(req, res) {
           const record = attendanceMap[`${staff.id}_${dateKey}`];
 
           if (record && record.check_in) {
-            const isLate = checkIsLate(record.check_in);
-            const isEarly = checkIsEarly(record.check_out);
+            const isLate = checkIsLate(record.check_in, settings.school_start_time);
+            const isEarly = checkIsEarly(record.check_out, settings.school_end_time);
 
             let statusSymbol = "P";
             if (isLate && isEarly) {

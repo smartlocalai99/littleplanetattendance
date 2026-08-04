@@ -24,14 +24,13 @@ import { getSql } from "@/lib/db";
 import { ensureCoreSchema } from "@/lib/migrations";
 import {
   APP_TIME_ZONE,
-  EARLY_BEFORE,
   formatDuration,
   formatIstDate,
   formatIstTime,
   getIstDateKey,
-  LATE_AFTER,
   serializeTimestamp,
 } from "@/lib/time";
+import { getSchoolSettings } from "@/lib/settings";
 import {
   ADMIN_TUTORIAL_STORAGE_KEY,
   hasSeenTutorial,
@@ -105,6 +104,7 @@ export async function getServerSideProps({ req, query }) {
       : today;
   const sql = getSql();
   await ensureCoreSchema(sql);
+  const settings = await getSchoolSettings(sql);
 
   const qrDataUrl = await QRCode.toDataURL(SCHOOL_ATTENDANCE_QR_VALUE, {
     margin: 1,
@@ -125,7 +125,7 @@ export async function getServerSideProps({ req, query }) {
       CASE
         WHEN a.check_in IS NOT NULL THEN
           a.check_in > (
-            (a.attendance_date + ${LATE_AFTER}::time)
+            (a.attendance_date + ${settings.school_start_time}::time)
             AT TIME ZONE 'Asia/Kolkata'
           )
         ELSE false
@@ -133,7 +133,7 @@ export async function getServerSideProps({ req, query }) {
       CASE
         WHEN a.check_out IS NOT NULL THEN
           a.check_out < (
-            (a.attendance_date + ${EARLY_BEFORE}::time)
+            (a.attendance_date + ${settings.school_end_time}::time)
             AT TIME ZONE 'Asia/Kolkata'
           )
         ELSE false
